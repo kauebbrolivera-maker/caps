@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14121f"><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icons/icon.svg">
+<title>Como funciona — Caps</title>
+<style>
+body{margin:0;background:#14121f;color:#f4f1ff;font:16px/1.55 system-ui,-apple-system,sans-serif;padding:calc(16px + env(safe-area-inset-top)) 18px 40px}
+a{color:#ffb347}h1{font-size:26px;margin:.2em 0}h2{font-size:18px;margin-top:28px;color:#ffb347}
+.card{background:#1e1b2e;border:1px solid #2d2944;border-radius:16px;padding:12px 14px;margin:10px 0}
+code{background:#2d2944;padding:1px 5px;border-radius:5px;font-size:14px}small{color:#9c95bd}
+.back{display:inline-block;margin-bottom:8px;text-decoration:none;font-weight:700}
+</style></head><body>
+<a class="back" href="./">‹ Voltar ao editor</a>
+<h1>Como funciona o Caps</h1>
+<p>O Caps é um editor de vídeo que roda <b>inteiro no seu iPhone</b>, dentro do navegador. Nenhum vídeo sai do aparelho. Aqui vão as peças, para você aprender e mexer.</p>
+
+<h2>1. Prévia em tempo real: WebGL + shaders</h2>
+<div class="card">Cada quadro do vídeo vira uma <b>textura</b> na GPU. Um pequeno programa (o <i>fragment shader</i>, em GLSL) roda para cada pixel e aplica: zoom/posição, <b>matriz de cor</b> 4×5 (os filtros), brilho/contraste/saturação, <b>LUT 3D</b>, chroma key e máscara. Por cima, um canvas 2D desenha textos, stickers e legendas animados.<br><small>Arquivo: <code>src/renderer.js</code>, <code>src/scene.js</code></small></div>
+
+<h2>2. Filtros e LUTs</h2>
+<div class="card"><b>Matriz de cor</b>: cada canal novo é uma soma ponderada de R, G, B (ex.: P&B usa os pesos de luminância 0,2126 / 0,7152 / 0,0722).<br><b>LUT 3D</b> (<i>Look-Up Table</i>): um cubo de N×N×N cores — para cada cor de entrada, a saída já calculada. O Caps lê arquivos <code>.cube</code> (padrão aberto usado no DaVinci Resolve, Premiere etc.), guarda o cubo numa textura 2D "fatiada" e interpola entre fatias.<br><small>Arquivo: <code>src/looks.js</code></small></div>
+
+<h2>3. Animação: keyframes e curvas de suavização</h2>
+<div class="card">Um <b>keyframe</b> guarda um valor (zoom, x, y) em um instante. Entre dois keyframes o valor é interpolado: <code>valor = a + (b − a) · curva(progresso)</code>. A curva "suave" é <code>x²(3 − 2x)</code> (smoothstep). Transições e efeitos (aproximar, tremor, pulso) são a mesma ideia com fórmulas diferentes; o tremor soma senos de frequências "quebradas" para parecer aleatório.</div>
+
+<h2>4. Chroma key</h2>
+<div class="card">Converte a cor do pixel para o espaço <b>YCbCr</b> e mede a distância até a cor-chave só nos canais de cor (Cb, Cr), ignorando o brilho — assim sombras no fundo verde também somem. <code>smoothstep</code> dá uma borda suave.</div>
+
+<h2>5. Música e detecção de batidas</h2>
+<div class="card">A música é decodificada com a <b>Web Audio API</b>. Para achar as batidas, o Caps calcula a energia a cada ~10 ms, pega os <b>aumentos súbitos</b> (fluxo de onset) e usa <b>autocorrelação</b> para descobrir o intervalo que mais se repete → BPM. Com isso, "Cortar na batida" ajusta a duração dos clipes.<br><small>Arquivo: <code>src/audio.js</code></small></div>
+
+<h2>6. Legendas automáticas: Whisper</h2>
+<div class="card"><b>Whisper</b> é um modelo de reconhecimento de fala da OpenAI com pesos abertos (licença MIT), treinado em 680 mil horas de áudio em ~100 línguas, incluindo português. É um <b>Transformer encoder-decoder</b>: o áudio vira um <i>espectrograma log-Mel</i> (80 faixas de frequência, janelas de 30 s), o encoder "entende" o som e o decoder escreve o texto token por token, com marcas de tempo.<br>
+O Caps usa a versão convertida para <b>ONNX</b> (<code>Xenova/whisper-tiny</code>, 39 M parâmetros, ou <code>whisper-base</code>, 74 M) e quantizada em 8 bits, rodando com <b>transformers.js</b> sobre <b>onnxruntime-web</b> (WebAssembly). O modelo só é baixado quando você pede, e fica em cache para uso offline.<br><small>Arquivo: <code>src/captions-worker.js</code> (roda num Web Worker para não travar a tela)</small></div>
+
+<h2>7. Exportação MP4: WebCodecs + ffmpeg.wasm</h2>
+<div class="card">O Caps renderiza cada quadro no tempo exato (não depende de tocar em tempo real) e entrega à <b>WebCodecs</b> (<code>VideoEncoder</code>, H.264 acelerado pelo hardware do iPhone). O <b>mp4-muxer</b> monta o arquivo. O áudio é mixado offline (<code>OfflineAudioContext</code>) e o <b>ffmpeg.wasm</b> — o FFmpeg compilado para WebAssembly, versão de 1 thread — codifica em AAC e junta tudo. Se o navegador não tiver WebCodecs, o próprio ffmpeg.wasm codifica o vídeo (libx264), mais devagar.<br><small>Arquivo: <code>src/export.js</code></small></div>
+
+<h2>8. PWA</h2>
+<div class="card">Um <b>manifest</b> + <b>service worker</b> deixam instalar o Caps na tela de início (Safari → Compartilhar → "Adicionar à Tela de Início") e abrir offline.</div>
+
+<h2>Para estudar mais</h2>
+<div class="card">
+• Whisper — artigo "Robust Speech Recognition via Large-Scale Weak Supervision" (Radford et al., 2022)<br>
+• transformers.js — huggingface.co/docs/transformers.js<br>
+• ffmpeg.wasm — ffmpegwasm.netlify.app<br>
+• WebCodecs — developer.mozilla.org/docs/Web/API/WebCodecs_API<br>
+• The Book of Shaders — thebookofshaders.com<br>
+• Próximos modelos planejados: MediaPipe Selfie Segmentation / RMBG (remover fundo), Piper TTS (voz), Silero VAD (cortar silêncios). Veja <code>FEATURES.md</code>.
+</div>
+<p><small>Caps é um projeto original e de código aberto. Não é afiliado a nenhum outro aplicativo.</small></p>
+</body></html>
