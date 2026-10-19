@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#14121f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Caps">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="apple-touch-icon" href="../icons/icon-180.png">
+<link rel="icon" href="../icons/icon.svg">
+<title>Caps — editor de vídeo</title>
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="../" aria-label="Início do Caps"><img src="../icons/icon.svg" alt=""><b>Caps</b></a>
+  <div class="top-actions">
+    <button id="aspectBtn" class="pill">9:16</button>
+    <a class="pill ghost" href="../como-funciona.html" aria-label="Como funciona">?</a>
+    <button id="exportBtn" class="pill hot">Exportar</button>
+  </div>
+</header>
+<main>
+  <section id="stageWrap"><div id="stage"></div>
+    <div id="empty" class="empty">
+      <div class="empty-card">
+        <h1>Bora editar?</h1>
+        <p>Tudo roda no seu iPhone. Nada é enviado para servidor.</p>
+        <label class="big-btn">＋ Importar vídeos e fotos<input id="fileIn" type="file" accept="video/*,image/*" multiple hidden></label>
+        <button id="demoBtn" class="link">ou criar clipes de demonstração</button>
+      </div>
+    </div>
+  </section>
+  <div class="transport">
+    <span id="time">0:00.0 / 0:00.0</span>
+    <button id="playBtn" class="round" aria-label="Reproduzir">▶</button>
+    <div class="zoom"><button id="zOut" aria-label="Diminuir zoom">−</button><button id="zIn" aria-label="Aumentar zoom">＋</button></div>
+  </div>
+  <section id="tl">
+    <div id="tlInner">
+      <div id="ruler"></div>
+      <div id="trackV" class="track"></div>
+      <div id="trackT" class="track small"></div>
+      <div id="trackC" class="track small"></div>
+      <div id="trackM" class="track small"></div>
+    </div>
+  </section>
+  <div id="playhead"></div>
+</main>
+<nav id="tools" class="tools"></nav>
+<div id="sheet" class="sheet" hidden><div class="sheet-card"><div class="grab"></div><div class="sheet-head"><b id="sheetTitle"></b><button id="sheetClose" class="pill">OK</button></div><div id="sheetBody"></div></div></div>
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

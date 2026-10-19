@@ -1,6 +1,6 @@
 import { Renderer } from './renderer.js';
 import { FILTERS, LUTS, parseCube } from './looks.js';
-import { layout, totalDur, clipDur, activeAt, renderFrame } from './scene.js';
+import { layout, totalDur, clipDur, activeAt, renderFrame, KB } from './scene.js';
 import { decode, mix, detectBeats } from './audio.js';
 
 const $ = s => document.querySelector(s);
@@ -12,8 +12,7 @@ let R;
 
 // ---------- prévia ----------
 function setupStage() {
-  const portrait = P.aspect === '9:16';
-  const w = portrait ? 540 : 960, h = portrait ? 960 : 540;
+  const [w, h] = P.aspect === '9:16' ? [540, 960] : P.aspect === '1:1' ? [720, 720] : [960, 540];
   if (!R) { R = new Renderer(w, h); $('#stage').appendChild(R.out); } else R.resize(w, h);
   $('#aspectBtn').textContent = P.aspect;
 }
@@ -67,6 +66,7 @@ function newClip(file, m, extra = {}) {
   return { id: uid(), file, url: m.url, el: m.el, kind: m.kind, srcDur: m.dur, in: 0, out: m.dur, speed: 1, volume: 1, filter: 'original', filterAmt: 1, lut: 'nenhuma', lutAmt: 1, adj: { b: 0, c: 1, s: 1 }, effect: 'nenhum', transition: 'nenhuma', fit: 'contain', opacity: 1, key: { on: false, color: '#00ff00', tol: 0.12, soft: 0.08 }, mask: { type: 0, size: 0.35, feather: 0.05, invert: false }, motion: { on: false, ease: 'suave', from: { s: 1, x: 0, y: 0 }, to: { s: 1.2, x: 0, y: 0 } }, ...extra };
 }
 async function thumb(c) {
+  if (c.kind === 'video') await new Promise(r => { const to = setTimeout(r, 1500); c.el.addEventListener('seeked', () => { clearTimeout(to); r(); }, { once: true }); c.el.currentTime = Math.min(0.5, c.srcDur / 3); });
   const cv = document.createElement('canvas'); cv.height = 58; cv.width = Math.round(58 * ((c.el.videoWidth || c.el.naturalWidth) / (c.el.videoHeight || c.el.naturalHeight) || 1));
   try { cv.getContext('2d').drawImage(c.el, 0, 0, cv.width, cv.height); c.thumb = cv.toDataURL('image/jpeg', 0.6); } catch {}
 }
@@ -109,12 +109,13 @@ function drawTimeline() {
     if (c.thumb) d.style.backgroundImage = `url(${c.thumb})`;
     d.innerHTML = `<span class="tag">${(end - start).toFixed(1)}s${c.speed !== 1 ? ' · ' + c.speed + 'x' : ''}</span>` + (c.transition !== 'nenhuma' ? '<span class="tr">⇄</span>' : '');
     d.onclick = () => select('clip', c.id); tv.appendChild(d);
+    if (sel?.id === c.id) for (const side of ['l', 'r']) { const h = document.createElement('div'); h.className = 'h ' + side; h.setAttribute('aria-label', side === 'l' ? 'Aparar início' : 'Aparar fim'); trimDrag(h, c, side, d, start); d.appendChild(h); }
   }
-  const tt = $('#trackT'); tt.innerHTML = '';
+  const tt = $('#trackT'), tc = $('#trackC'); tt.innerHTML = ''; tc.innerHTML = '';
   for (const x of P.texts) {
     const d = document.createElement('div'); d.className = `chip ${x.kind}` + (sel?.id === x.id ? ' sel' : '');
     d.style.left = off + x.start * PPS + 'px'; d.style.width = Math.max(10, (x.end - x.start) * PPS - 2) + 'px'; d.textContent = x.text;
-    d.onclick = () => select('text', x.id); tt.appendChild(d);
+    d.onclick = () => select('text', x.id); (x.kind === 'caption' ? tc : tt).appendChild(d);
   }
   const tm = $('#trackM'); tm.innerHTML = '';
   if (P.music) {
@@ -123,6 +124,21 @@ function drawTimeline() {
     for (const b of P.beats) if (b < total) d.insertAdjacentHTML('beforeend', `<i class="beat" style="left:${b * PPS}px"></i>`);
     d.onclick = () => select('music'); tm.appendChild(d);
   }
+}
+// alças de corte arrastáveis (toque) no clipe selecionado
+function trimDrag(h, c, side, d, start) {
+  let x0 = 0, o = null;
+  h.addEventListener('click', e => e.stopPropagation());
+  h.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); h.setPointerCapture(e.pointerId); x0 = e.clientX; o = { in: c.in, out: c.out }; setPlaying(false); d.classList.add('trimming'); });
+  h.addEventListener('pointermove', e => {
+    if (!o) return;
+    const ds = (e.clientX - x0) / PPS, sp = c.kind === 'image' ? 1 : c.speed, max = c.kind === 'image' ? 30 : c.srcDur;
+    if (side === 'l') { if (c.kind === 'image') c.out = Math.max(0.2, o.out - ds); else c.in = Math.max(0, Math.min(o.in + ds * sp, c.out - 0.15)); t = start; }
+    else { c.out = Math.max(c.in + 0.15, Math.min(o.out + ds * sp, max)); t = start + clipDur(c) - 0.04; }
+    d.style.width = Math.max(8, clipDur(c) * PPS - 2) + 'px'; d.querySelector('.tag').textContent = clipDur(c).toFixed(1) + 's';
+  });
+  const end = () => { if (!o) return; o = null; d.classList.remove('trimming'); refresh(); followScroll(); };
+  h.addEventListener('pointerup', end); h.addEventListener('pointercancel', end);
 }
 function refresh() { $('#empty').hidden = P.clips.length > 0; t = Math.min(t, totalDur(P)); drawTimeline(); drawTools(); }
 function select(type, id) { sel = type ? { type, id } : null; setPlaying(false); refresh(); }
@@ -187,7 +203,10 @@ function speedSheet() {
 }
 function trSheet() {
   const c = selClip(); if (P.clips.indexOf(c) === 0) return toast('A transição entra no começo do clipe — escolha o 2º em diante');
-  sheet('Transição de entrada', '<div class="grid"></div>', r => grid(r, [['nenhuma', 'Nenhuma'], ['fade', 'Dissolver'], ['slideL', 'Deslizar ←'], ['slideU', 'Deslizar ↑'], ['zoom', 'Zoom'], ['preto', 'Pelo preto']], c.transition, v => (c.transition = v)));
+  sheet('Transição de entrada', '<div class="grid"></div><p class="note">Duração: 0,5 s no início deste clipe.</p><button class="btn" id="trAll">Aplicar em todos os cortes</button>', r => {
+    grid(r, [['nenhuma', 'Nenhuma'], ['fade', 'Dissolver'], ['slideL', 'Deslizar ←'], ['slideU', 'Deslizar ↑'], ['zoom', 'Zoom +'], ['zoomOut', 'Zoom −'], ['blur', 'Desfocar'], ['preto', 'Pelo preto']], c.transition, v => { c.transition = v; t = Math.max(0, layout(P).find(x => x.c === c).start - 0.3); });
+    r.querySelector('#trAll').onclick = () => { P.clips.forEach((o, k) => k && (o.transition = c.transition)); toast('Transição aplicada em todos os cortes'); drawTimeline(); };
+  });
 }
 function fxSheet() { const c = selClip(); sheet('Efeitos', '<div class="grid"></div>', r => grid(r, [['nenhum', 'Nenhum'], ['zoomIn', 'Aproximar'], ['zoomOut', 'Afastar'], ['tremor', 'Tremor'], ['pulso', 'Pulso'], ['flash', 'Pisca']], c.effect, v => (c.effect = v))); }
 function filterSheet() {
@@ -208,7 +227,9 @@ function filterSheet() {
 function adjSheet() { const c = selClip(); sheet('Ajustes', range('ab', 'Brilho', -0.3, 0.3, 0.01, c.adj.b) + range('ac', 'Contraste', 0.5, 1.6, 0.01, c.adj.c) + range('as', 'Saturação', 0, 2, 0.01, c.adj.s) + range('op', 'Opacidade', 0, 1, 0.01, c.opacity) + '<div class="row"><label>Enquadrar</label><select id="fit"><option value="contain">Caber (barras)</option><option value="cover">Preencher (corta)</option></select></div>', r => { onRange(r, 'ab', v => (c.adj.b = v)); onRange(r, 'ac', v => (c.adj.c = v)); onRange(r, 'as', v => (c.adj.s = v)); onRange(r, 'op', v => (c.opacity = v)); const f = r.querySelector('#fit'); f.value = c.fit; f.onchange = () => (c.fit = f.value); }); }
 function motionSheet() {
   const c = selClip(), m = c.motion;
-  sheet('Movimento (keyframes)', `<p class="note">Dois quadros-chave: início e fim do clipe. O Caps interpola zoom e posição com a curva escolhida.</p><div class="row"><label>Ativo</label><input type="checkbox" id="mon" ${m.on ? 'checked' : ''}></div><div class="row"><label>Curva</label><select id="me"><option value="linear">Linear</option><option value="suave">Suave</option><option value="entrada">Acelera</option><option value="saida">Desacelera</option></select></div><b>Início ◆</b>${range('fs', 'Zoom', 0.5, 3, 0.01, m.from.s)}${range('fx', 'X', -0.5, 0.5, 0.01, m.from.x)}${range('fy', 'Y', -0.5, 0.5, 0.01, m.from.y)}<b>Fim ◆</b>${range('ts', 'Zoom', 0.5, 3, 0.01, m.to.s)}${range('tx', 'X', -0.5, 0.5, 0.01, m.to.x)}${range('ty', 'Y', -0.5, 0.5, 0.01, m.to.y)}`, r => {
+  sheet('Movimento (keyframes)', `<b>Ken Burns rápido</b><div class="grid" id="kb" style="margin:8px 0 4px"></div><p class="note">Dois quadros-chave: início e fim do clipe. O Caps interpola zoom e posição com a curva escolhida.</p><div class="row"><label>Ativo</label><input type="checkbox" id="mon" ${m.on ? 'checked' : ''}></div><div class="row"><label>Curva</label><select id="me"><option value="linear">Linear</option><option value="suave">Suave</option><option value="entrada">Acelera</option><option value="saida">Desacelera</option></select></div><b>Início ◆</b>${range('fs', 'Zoom', 0.5, 3, 0.01, m.from.s)}${range('fx', 'X', -0.5, 0.5, 0.01, m.from.x)}${range('fy', 'Y', -0.5, 0.5, 0.01, m.from.y)}<b>Fim ◆</b>${range('ts', 'Zoom', 0.5, 3, 0.01, m.to.s)}${range('tx', 'X', -0.5, 0.5, 0.01, m.to.x)}${range('ty', 'Y', -0.5, 0.5, 0.01, m.to.y)}`, r => {
+    const kb = r.querySelector('#kb');
+    for (const [k, v] of Object.entries(KB)) { const b = document.createElement('button'); b.className = 'opt'; b.textContent = v.nome; b.onclick = () => { m.from = { ...v.from }; m.to = { ...v.to }; m.on = true; m.ease = 'suave'; t = layout(P).find(x => x.c === c).start; motionSheet(); toast('Ken Burns: ' + v.nome); }; kb.appendChild(b); }
     r.querySelector('#mon').onchange = e => (m.on = e.target.checked); const e = r.querySelector('#me'); e.value = m.ease; e.onchange = () => (m.ease = e.value);
     for (const [id, o, k] of [['fs', m.from, 's'], ['fx', m.from, 'x'], ['fy', m.from, 'y'], ['ts', m.to, 's'], ['tx', m.to, 'x'], ['ty', m.to, 'y']]) onRange(r, id, v => { o[k] = v; m.on = true; r.querySelector('#mon').checked = true; });
   });
@@ -217,7 +238,8 @@ function keySheet() { const c = selClip(), k = c.key; sheet('Chroma key', `<p cl
 function maskSheet() { const c = selClip(), m = c.mask; sheet('Máscara', `<div class="grid"></div>${range('ms', 'Tamanho', 0.05, 0.7, 0.01, m.size)}${range('mf', 'Borda suave', 0, 0.3, 0.01, m.feather)}<div class="row"><label>Inverter</label><input type="checkbox" id="mi" ${m.invert ? 'checked' : ''}></div>`, r => { grid(r, [[0, 'Nenhuma'], [1, 'Círculo'], [2, 'Faixa']], m.type, v => (m.type = v)); onRange(r, 'ms', v => (m.size = v)); onRange(r, 'mf', v => (m.feather = v)); r.querySelector('#mi').onchange = e => (m.invert = e.target.checked); }); }
 function volSheet() { const c = selClip(); sheet('Volume do clipe', range('vol', 'Volume', 0, 2, 0.01, c.volume ?? 1), r => onRange(r, 'vol', v => (c.volume = v))); }
 function bgSheet() { sheet('Cor de fundo', `<div class="row"><label>Cor</label><input type="color" id="bg" value="${P.bg || '#000000'}"></div>`, r => (r.querySelector('#bg').oninput = e => (P.bg = e.target.value))); }
-function toggleAspect() { P.aspect = P.aspect === '9:16' ? '16:9' : '9:16'; setupStage(); toast('Formato ' + P.aspect); }
+const ASPECTS = ['9:16', '1:1', '16:9'];
+function toggleAspect() { P.aspect = ASPECTS[(ASPECTS.indexOf(P.aspect) + 1) % ASPECTS.length]; setupStage(); toast('Formato ' + P.aspect); }
 $('#aspectBtn').onclick = toggleAspect;
 
 // ---------- texto & stickers ----------
@@ -226,7 +248,7 @@ function textSheet() {
   const x = selText();
   sheet('Texto', `<textarea id="tx" rows="2">${x.text}</textarea><b style="display:block;margin-top:12px">Animação</b><div class="grid" style="margin-top:8px"></div>${range('ty', 'Posição', 0.05, 0.95, 0.01, x.y)}${range('tsz', 'Tamanho', 0.02, 0.15, 0.002, x.size)}<div class="row"><label>Cor</label><input type="color" id="tc" value="${x.color}"><label>Fundo</label><input type="checkbox" id="tb" ${x.bg ? 'checked' : ''}></div><div class="row"><label>Fonte</label><select id="tf"><option value="">Sistema</option><option value="Georgia, serif">Serifa</option><option value="ui-rounded, 'Arial Rounded MT Bold', system-ui">Arredondada</option><option value="'Courier New', monospace">Máquina</option><option value="'Marker Felt', 'Comic Sans MS', cursive">Caneta</option></select></div>`, r => {
     r.querySelector('#tx').oninput = e => { x.text = e.target.value; drawTimeline(); };
-    grid(r, [['pop', 'Pop'], ['fade', 'Surgir'], ['subir', 'Subir'], ['digitar', 'Digitar'], ['balanco', 'Balanço'], ['nenhuma', 'Fixo']], x.anim, v => { x.anim = v; t = x.start; });
+    grid(r, [['pop', 'Pop'], ['digitar', 'Máquina de escrever'], ['deslizar', 'Deslizar'], ['quicar', 'Quicar'], ['zoom', 'Zoom'], ['fade', 'Surgir'], ['subir', 'Subir'], ['balanco', 'Balanço'], ['nenhuma', 'Fixo']], x.anim, v => { x.anim = v; t = x.start; });
     onRange(r, 'ty', v => (x.y = v)); onRange(r, 'tsz', v => (x.size = v));
     r.querySelector('#tc').oninput = e => (x.color = e.target.value); r.querySelector('#tb').onchange = e => (x.bg = e.target.checked ? '#14121fcc' : null);
     const f = r.querySelector('#tf'); f.value = x.font || ''; f.onchange = () => (x.font = f.value);
@@ -258,9 +280,31 @@ function beatSync() {
 }
 
 // ---------- legendas (Whisper) ----------
+function capStyle(r) {
+  const st = r.querySelector('#cst').value, y = +r.querySelector('#cpos').value;
+  const base = { y, size: 0.042, anim: 'fade', color: '#fff', stroke: '#000', bg: null };
+  if (st === 'b') Object.assign(base, { stroke: null, bg: '#000000b3' });
+  if (st === 'c') Object.assign(base, { color: '#ffe14d', size: 0.048 });
+  if (st === 'd') Object.assign(base, { anim: 'pop', size: 0.052, stroke: '#14121f' });
+  if (st === 'e') Object.assign(base, { anim: 'digitar', bg: '#14121fcc', stroke: null });
+  return base;
+}
+function listCaptions(r) {
+  const caps = P.texts.filter(x => x.kind === 'caption').sort((a, b) => a.start - b.start), box = r.querySelector('#clist');
+  if (!caps.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<b style="display:block;margin-top:14px">Editar legendas</b>' + caps.map(x => `<div class="cap-row" data-id="${x.id}"><button class="cap-t">${x.start.toFixed(1)}s</button><input type="text" value="${x.text.replace(/"/g, '&quot;')}"><button class="cap-del" aria-label="Apagar legenda">✕</button></div>`).join('');
+  box.querySelectorAll('.cap-row').forEach(row => {
+    const x = P.texts.find(o => o.id === row.dataset.id);
+    row.querySelector('input').oninput = e => { x.text = e.target.value; };
+    row.querySelector('.cap-t').onclick = () => { t = x.start + 0.05; followScroll(); };
+    row.querySelector('.cap-del').onclick = () => { P.texts = P.texts.filter(o => o !== x); row.remove(); };
+  });
+}
 function captionSheet() {
   if (!P.clips.length) return toast('Importe um vídeo com fala primeiro');
-  sheet('Legendas automáticas', `<p class="note">Reconhecimento de fala com <b>Whisper</b> rodando no próprio aparelho (transformers.js + ONNX/WASM). Na 1ª vez baixa o modelo (tiny ≈ 40 MB, base ≈ 80 MB) e guarda em cache.</p><div class="row"><label>Modelo</label><select id="mdl"><option value="Xenova/whisper-tiny">Whisper tiny (rápido)</option><option value="Xenova/whisper-base">Whisper base (melhor)</option></select></div><div class="row"><label>Estilo</label><select id="cst"><option value="a">Branco c/ contorno</option><option value="b">Caixa escura</option><option value="c">Amarelo</option></select></div><div class="bar"><div id="cbar"></div></div><p id="cmsg" class="note"></p><button class="btn hot" id="go">Gerar legendas em português</button>`, r => {
+  sheet('Legendas automáticas', `<p class="note">Reconhecimento de fala com <b>Whisper</b> rodando no próprio aparelho (transformers.js + ONNX/WASM). Na 1ª vez baixa o modelo (tiny ≈ 40 MB, base ≈ 80 MB) e guarda em cache.</p><div class="row"><label>Modelo</label><select id="mdl"><option value="Xenova/whisper-tiny">Whisper tiny (rápido)</option><option value="Xenova/whisper-base">Whisper base (melhor)</option></select></div><div class="row"><label>Estilo</label><select id="cst"><option value="a">Branco c/ contorno</option><option value="b">Caixa escura</option><option value="c">Amarelo destaque</option><option value="d">Pop (surge grande)</option><option value="e">Máquina de escrever</option></select></div><div class="row"><label>Posição</label><select id="cpos"><option value="0.8">Embaixo</option><option value="0.5">Centro</option><option value="0.2">Em cima</option></select></div><div class="bar"><div id="cbar"></div></div><p id="cmsg" class="note"></p><button class="btn hot" id="go">Gerar legendas em português</button><div id="clist"></div>`, r => {
+    listCaptions(r);
+    r.querySelector('#cst').onchange = r.querySelector('#cpos').onchange = () => { for (const x of P.texts) if (x.kind === 'caption') Object.assign(x, capStyle(r)); toast('Estilo aplicado às legendas'); };
     r.querySelector('#go').onclick = async () => {
       const msg = m => (r.querySelector('#cmsg').textContent = m), bar = r.querySelector('#cbar');
       msg('Extraindo áudio (16 kHz mono)…');
@@ -275,8 +319,8 @@ function captionSheet() {
         if (d.type === 'done') {
           const st = r.querySelector('#cst').value;
           P.texts = P.texts.filter(x => x.kind !== 'caption');
-          for (const ch of d.chunks) { const [s, e] = ch.timestamp; if (!ch.text.trim()) continue; P.texts.push({ id: uid(), kind: 'caption', text: ch.text.trim(), start: s, end: e ?? s + 2, anim: 'fade', y: 0.8, size: 0.042, color: st === 'c' ? '#ffe14d' : '#fff', stroke: st === 'b' ? null : '#000', bg: st === 'b' ? '#000000b3' : null }); }
-          msg(`${d.chunks.length} trechos de legenda criados ✔`); w.terminate(); drawTimeline();
+          for (const ch of d.chunks) { const [s, e] = ch.timestamp; if (!ch.text.trim() || /^\s*[\[(].*[\])]\s*$/.test(ch.text)) continue; /* ignora marcações tipo [MÚSICA] */ P.texts.push({ id: uid(), kind: 'caption', text: ch.text.trim(), start: s, end: e ?? s + 2, ...capStyle(r) }); }
+          msg(`${d.chunks.length} trechos de legenda criados ✔ — toque para editar abaixo`); w.terminate(); drawTimeline(); listCaptions(r);
         }
       };
       w.postMessage({ audio: ab.getChannelData(0), model: r.querySelector('#mdl').value });
@@ -287,7 +331,7 @@ function captionSheet() {
 // ---------- exportação ----------
 $('#exportBtn').onclick = () => {
   if (!P.clips.length) return toast('Nada para exportar ainda');
-  sheet('Exportar MP4', `<div class="row"><label>Formato</label><select id="ea"><option>9:16</option><option>16:9</option></select></div><div class="row"><label>Resolução</label><select id="er"><option value="720">720p (recomendado no iPhone)</option><option value="1080">1080p</option><option value="480">480p (rápido)</option></select></div><div class="row"><label>Quadros/s</label><select id="ef"><option>30</option><option>24</option><option>60</option></select></div><div class="bar"><div id="ebar"></div></div><p id="emsg" class="note">Duração: ${fmt(totalDur(P))}. Mantenha o app aberto durante a exportação.</p><button class="btn hot" id="ego">Exportar</button><div id="eout"></div>`, r => {
+  sheet('Exportar MP4', `<div class="row"><label>Formato</label><select id="ea"><option value="9:16">9:16 (Reels/TikTok/Shorts)</option><option value="1:1">1:1 (feed)</option><option value="16:9">16:9 (YouTube)</option></select></div><div class="row"><label>Resolução</label><select id="er"><option value="1080">1080p (1080×1920 no 9:16)</option><option value="720">720p (mais rápido no iPhone)</option><option value="480">480p (rascunho)</option></select></div><div class="row"><label>Quadros/s</label><select id="ef"><option>30</option><option>24</option><option>60</option></select></div><div class="bar"><div id="ebar"></div></div><p id="emsg" class="note">Duração: ${fmt(totalDur(P))}. Mantenha o app aberto durante a exportação.</p><button class="btn hot" id="ego">Exportar</button><div id="eout"></div>`, r => {
     r.querySelector('#ea').value = P.aspect;
     r.querySelector('#ego').onclick = async e => {
       e.target.disabled = true; P.aspect = r.querySelector('#ea').value; setupStage();
@@ -319,5 +363,5 @@ let pinch = 0; $('#tl').addEventListener('touchmove', e => { if (e.touches.lengt
 $('#tl').addEventListener('touchend', () => (pinch = 0));
 
 setupStage(); refresh(); requestAnimationFrame(t0 => { lastTick = t0; tick(t0); });
-if ('serviceWorker' in navigator && location.hostname !== 'localhost-nosw') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.hostname !== 'localhost-nosw') navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(() => {});
 window.__caps = { P, select, get t() { return t; }, set t(v) { t = v; followScroll(); }, sheet: { trSheet, filterSheet, textSheet, captionSheet, motionSheet } };

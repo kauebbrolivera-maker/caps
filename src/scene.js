@@ -23,7 +23,7 @@ export function activeAt(p, t) {
 
 export function layerFor(a, t) {
   const c = a.c, d = clipDur(c), u = Math.min(1, a.local / Math.max(d, 0.01));
-  let s = 1, tx = 0, ty = 0, alpha = 1;
+  let s = 1, tx = 0, ty = 0, alpha = 1, blur = 0;
   // "keyframes" de movimento: início → fim com curva de suavização
   const k = c.motion; if (k && k.on) { const e = (ease[k.ease] || ease.suave)(u); s = lerp(k.from.s, k.to.s, e); tx = lerp(k.from.x, k.to.x, e); ty = lerp(k.from.y, k.to.y, e); }
   switch (c.effect) {
@@ -41,14 +41,18 @@ export function layerFor(a, t) {
       if (a.tr === 'slideU') ty += 1 - e;
       if (a.tr === 'zoom') { s *= 1 + 0.6 * (1 - e); alpha *= e; }
       if (a.tr === 'preto') alpha *= Math.max(0, x * 2 - 1);
+      if (a.tr === 'blur') { blur = (1 - e) * 0.035; alpha *= e; }
+      if (a.tr === 'zoomOut') { s *= 1 - 0.35 * (1 - e); alpha *= e; }
     } else {
       if (a.tr === 'slideL') tx -= e;
       if (a.tr === 'slideU') ty -= e;
       if (a.tr === 'preto') alpha *= Math.max(0, 1 - x * 2);
+      if (a.tr === 'blur') blur = e * 0.035;
+      if (a.tr === 'zoom') s *= 1 + 0.3 * e;
     }
   }
   const el = c.el;
-  return { el, sw: el.videoWidth || el.naturalWidth, sh: el.videoHeight || el.naturalHeight, s, tx, ty, alpha, clip: c };
+  return { el, sw: el.videoWidth || el.naturalWidth, sh: el.videoHeight || el.naturalHeight, s, tx, ty, alpha, blur, clip: c };
 }
 
 // Textos, stickers e legendas animados no canvas 2D
@@ -56,7 +60,7 @@ export function drawTexts(ctx, p, t, W, H) {
   for (const x of p.texts) {
     if (t < x.start || t > x.end) continue;
     const lt = t - x.start, rem = x.end - t;
-    let sc = 1, a = 1, dy = 0, str = x.text;
+    let sc = 1, a = 1, dy = 0, dx = 0, str = x.text;
     const inP = Math.min(1, lt / 0.35);
     switch (x.anim) {
       case 'pop': { const b = 1.70158; const q = inP - 1; sc = 1 + (b + 1) * q * q * q + b * q * q; break; }
@@ -64,11 +68,14 @@ export function drawTexts(ctx, p, t, W, H) {
       case 'subir': dy = (1 - ease.saida(inP)) * 0.08 * H; a = inP; break;
       case 'digitar': str = x.text.slice(0, Math.ceil(x.text.length * Math.min(1, lt / Math.max(0.4, (x.end - x.start) * 0.5)))); break;
       case 'balanco': sc = 1 + Math.sin(lt * 6) * 0.05; break;
+      case 'deslizar': { const q = Math.min(1, lt / 0.45); dx = -(1 - ease.saida(q) ** 2) * W * 0.7; a = Math.min(1, q * 2); break; }
+      case 'quicar': { const q = Math.min(1, lt / 0.8); dy = -(1 - bounceOut(q)) * H * 0.18; a = Math.min(1, q * 4); break; }
+      case 'zoom': { const q = Math.min(1, lt / 0.4); sc = 2.2 - 1.2 * ease.saida(q); a = q; break; }
     }
     if (rem < 0.2) a *= rem / 0.2;
     const size = x.size * H;
     ctx.save(); ctx.globalAlpha = Math.max(0, a);
-    ctx.translate(W * (x.x ?? 0.5), H * x.y + dy); ctx.scale(Math.max(0.01, sc), Math.max(0.01, sc));
+    ctx.translate(W * (x.x ?? 0.5) + dx, H * x.y + dy); ctx.scale(Math.max(0.01, sc), Math.max(0.01, sc));
     ctx.font = `${x.kind === 'sticker' ? '' : '800 '}${size}px ${x.font || 'system-ui, -apple-system, sans-serif'}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const lines = wrap(ctx, str, W * 0.86);
@@ -81,6 +88,7 @@ export function drawTexts(ctx, p, t, W, H) {
     ctx.restore();
   }
 }
+function bounceOut(x) { const n = 7.5625, d = 2.75; if (x < 1 / d) return n * x * x; if (x < 2 / d) return n * (x -= 1.5 / d) * x + 0.75; if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + 0.9375; return n * (x -= 2.625 / d) * x + 0.984375; }
 function wrap(ctx, s, max) {
   const out = []; for (const para of s.split('\n')) { let line = ''; for (const w of para.split(' ')) { const tt = line ? line + ' ' + w : w; if (ctx.measureText(tt).width > max && line) { out.push(line); line = w; } else line = tt; } out.push(line); } return out;
 }
@@ -92,3 +100,13 @@ export function renderFrame(R, p, t) {
   R.compose(p.bg || '#000');
   drawTexts(R.ctx, p, t, R.w, R.h);
 }
+
+// Predefinições de movimento (Ken Burns): zoom lento + deslocamento suave
+export const KB = {
+  kbIn: { nome: 'Aproximar lento', from: { s: 1, x: 0, y: 0 }, to: { s: 1.25, x: 0, y: 0 } },
+  kbOut: { nome: 'Afastar lento', from: { s: 1.3, x: 0, y: 0 }, to: { s: 1, x: 0, y: 0 } },
+  kbL: { nome: 'Passear →', from: { s: 1.25, x: -0.08, y: 0 }, to: { s: 1.25, x: 0.08, y: 0 } },
+  kbR: { nome: 'Passear ←', from: { s: 1.25, x: 0.08, y: 0 }, to: { s: 1.25, x: -0.08, y: 0 } },
+  kbUp: { nome: 'Subir', from: { s: 1.25, x: 0, y: 0.08 }, to: { s: 1.3, x: 0, y: -0.06 } },
+  kbDiag: { nome: 'Diagonal', from: { s: 1.1, x: -0.05, y: 0.05 }, to: { s: 1.35, x: 0.06, y: -0.05 } },
+};

@@ -9,7 +9,7 @@ varying vec2 v;
 uniform sampler2D u_tex, u_lut;
 uniform vec2 u_box; uniform vec2 u_t; uniform float u_s, u_alpha, u_lutN, u_lutAmt, u_amt;
 uniform mat4 u_cm; uniform vec4 u_off; uniform vec3 u_adj;
-uniform vec3 u_key; uniform vec2 u_keyP; uniform vec4 u_mask;
+uniform vec3 u_key; uniform vec2 u_keyP; uniform vec4 u_mask; uniform float u_blur;
 vec3 lut(vec3 c){
   float N=u_lutN; float b=c.b*(N-1.); float b0=floor(b); float b1=min(b0+1.,N-1.);
   vec2 rg=vec2(c.r*(N-1.)+.5, c.g*(N-1.)+.5);
@@ -22,6 +22,12 @@ void main(){
   vec2 uv=((p-.5-u_t)/u_s)/u_box+.5;
   if(uv.x<0.||uv.y<0.||uv.x>1.||uv.y>1.) discard;
   vec4 c=texture2D(u_tex,uv);
+  if(u_blur>0.){ // desfoque radial simples (13 amostras) usado na transição
+    vec4 acc=c; float n=1.;
+    for(int i=0;i<12;i++){ float ang=float(i)*0.5236; float rr=u_blur*(0.5+0.5*mod(float(i),2.));
+      acc+=texture2D(u_tex,clamp(uv+vec2(cos(ang),sin(ang))*rr,0.,1.)); n+=1.; }
+    c=acc/n;
+  }
   vec3 o=c.rgb;
   vec4 m=u_cm*vec4(o,1.)+u_off; o=mix(o,m.rgb,u_amt);
   o=o+u_adj.x; o=(o-.5)*u_adj.y+.5;
@@ -56,7 +62,7 @@ export class Renderer {
     const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     const loc = gl.getAttribLocation(pr, 'a'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    this.u = {}; for (const n of ['u_tex','u_lut','u_box','u_t','u_s','u_alpha','u_lutN','u_lutAmt','u_amt','u_cm','u_off','u_adj','u_key','u_keyP','u_mask']) this.u[n] = gl.getUniformLocation(pr, n);
+    this.u = {}; for (const n of ['u_tex','u_lut','u_box','u_t','u_s','u_alpha','u_lutN','u_lutAmt','u_amt','u_cm','u_off','u_adj','u_key','u_keyP','u_mask','u_blur']) this.u[n] = gl.getUniformLocation(pr, n);
     gl.uniform1i(this.u.u_tex, 0); gl.uniform1i(this.u.u_lut, 1);
     this.tex = gl.createTexture(); this._setupTex(this.tex);
     this.lutTex = gl.createTexture(); this._setupTex(this.lutTex, gl.LINEAR);
@@ -87,7 +93,7 @@ export class Renderer {
     const sa = L.sw / L.sh, oa = this.w / this.h;
     const fit = c.fit === 'cover' ? (sa > oa ? [sa / oa, 1] : [1, oa / sa]) : (sa > oa ? [1, oa / sa] : [sa / oa, 1]);
     gl.uniform2f(u.u_box, fit[0], fit[1]); gl.uniform2f(u.u_t, L.tx || 0, L.ty || 0); gl.uniform1f(u.u_s, L.s || 1);
-    gl.uniform1f(u.u_alpha, (L.alpha ?? 1) * (c.opacity ?? 1));
+    gl.uniform1f(u.u_alpha, (L.alpha ?? 1) * (c.opacity ?? 1)); gl.uniform1f(u.u_blur, L.blur || 0);
     const m = (FILTERS[c.filter] || FILTERS.original).m;
     gl.uniformMatrix4fv(u.u_cm, false, new Float32Array([m[0], m[5], m[10], m[15], m[1], m[6], m[11], m[16], m[2], m[7], m[12], m[17], m[3], m[8], m[13], m[18]]));
     gl.uniform4f(u.u_off, m[4], m[9], m[14], m[19]); gl.uniform1f(u.u_amt, c.filterAmt ?? 1);
