@@ -320,7 +320,7 @@ function captionSheet() {
           const st = r.querySelector('#cst').value;
           P.texts = P.texts.filter(x => x.kind !== 'caption');
           for (const ch of d.chunks) { const [s, e] = ch.timestamp; if (!ch.text.trim() || /^\s*[\[(].*[\])]\s*$/.test(ch.text)) continue; /* ignora marcações tipo [MÚSICA] */ P.texts.push({ id: uid(), kind: 'caption', text: ch.text.trim(), start: s, end: e ?? s + 2, ...capStyle(r) }); }
-          msg(`${d.chunks.length} trechos de legenda criados ✔ — toque para editar abaixo`); w.terminate(); drawTimeline(); listCaptions(r);
+          const n = P.texts.filter(x => x.kind === 'caption').length; msg(n ? `${n} trechos de legenda criados ✔ — toque para editar abaixo` : 'Nenhuma fala reconhecida (só música/ruído). Tente o modelo base.'); w.terminate(); drawTimeline(); listCaptions(r);
         }
       };
       w.postMessage({ audio: ab.getChannelData(0), model: r.querySelector('#mdl').value });
