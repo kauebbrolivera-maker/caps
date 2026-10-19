@@ -2,56 +2,96 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#14121f">
+<meta name="description" content="Caps: editor de vídeo grátis que roda inteiro no seu celular. Cortes, transições, texto animado, legendas automáticas em português e exportação 9:16 em MP4 — sem enviar nada para servidor.">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Caps">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon.svg">
-<title>Caps — editor de vídeo</title>
-<link rel="stylesheet" href="/src/style.css">
+<title>Caps — editor de vídeo no seu celular, grátis e sem upload</title>
+<script>
+  // Quem instalou o app antigo (start_url na raiz) cai direto no editor.
+  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone || /[?&]editor\b/.test(location.search) || location.hash === '#editor') location.replace('editor/' + location.hash.replace('#editor', ''));
+</script>
+<link rel="stylesheet" href="/src/landing.css">
 </head>
 <body>
-<header class="top">
-  <div class="brand"><img src="icons/icon.svg" alt=""><b>Caps</b></div>
-  <div class="top-actions">
-    <button id="aspectBtn" class="pill">9:16</button>
-    <a class="pill ghost" href="como-funciona.html" aria-label="Como funciona">?</a>
-    <button id="exportBtn" class="pill hot">Exportar</button>
-  </div>
+<header class="nav">
+  <a class="logo" href="./"><img src="icons/icon.svg" alt="" width="30" height="30"><b>Caps</b></a>
+  <nav class="links"><a href="#recursos">Recursos</a><a href="#como">Como funciona</a><a href="#faq">Dúvidas</a></nav>
+  <a class="cta sm" href="editor/">Abrir editor</a>
 </header>
+
 <main>
-  <section id="stageWrap"><div id="stage"></div>
-    <div id="empty" class="empty">
-      <div class="empty-card">
-        <h1>Bora editar?</h1>
-        <p>Tudo roda no seu iPhone. Nada é enviado para servidor.</p>
-        <label class="big-btn">＋ Importar vídeos e fotos<input id="fileIn" type="file" accept="video/*,image/*" multiple hidden></label>
-        <button id="demoBtn" class="link">ou criar clipes de demonstração</button>
+<section class="hero">
+  <div class="hero-txt">
+    <span class="kicker">Grátis · sem cadastro · sem marca d'água</span>
+    <h1>Edite vídeos com <em>cara de profissional</em> direto no celular.</h1>
+    <p>O Caps corta, junta, anima texto, coloca legenda automática em português e exporta em 9:16 — tudo dentro do navegador. Seu vídeo nunca sai do aparelho.</p>
+    <div class="hero-cta"><a class="cta" href="editor/">Abrir editor</a><a class="ghost" href="#como">Ver como funciona</a></div>
+    <ul class="pills"><li>iPhone e Android</li><li>Funciona offline</li><li>MP4 1080×1920</li></ul>
+  </div>
+  <div class="hero-art" aria-hidden="true">
+    <div class="phone">
+      <div class="screen">
+        <div class="frame"><div class="sunset"></div><div class="mock-title">bora pra praia ☀️</div><div class="mock-cap">legenda gerada no aparelho</div></div>
+        <div class="mock-tl"><div class="ph"></div><span style="width:34%" class="c1"></span><span style="width:26%" class="c2"></span><span style="width:40%" class="c3"></span></div>
+        <div class="mock-tools"><i>✂</i><i>⇄</i><i>Aa</i><i>CC</i><i>◑</i></div>
       </div>
     </div>
-  </section>
-  <div class="transport">
-    <span id="time">0:00.0 / 0:00.0</span>
-    <button id="playBtn" class="round" aria-label="Reproduzir">▶</button>
-    <div class="zoom"><button id="zOut" aria-label="Diminuir zoom">−</button><button id="zIn" aria-label="Aumentar zoom">＋</button></div>
+    <div class="float f1">✂ Corte feito</div>
+    <div class="float f2">CC 12 legendas</div>
   </div>
-  <section id="tl">
-    <div id="tlInner">
-      <div id="ruler"></div>
-      <div id="trackV" class="track"></div>
-      <div id="trackT" class="track small"></div>
-      <div id="trackM" class="track small"></div>
-    </div>
-  </section>
-  <div id="playhead"></div>
+</section>
+
+<section id="recursos" class="sec">
+  <h2>Tudo o que um vídeo curto precisa</h2>
+  <p class="lead">Ferramentas pensadas para o polegar: linha do tempo de toque, menus grandes e prévia em tempo real.</p>
+  <div class="cards">
+    <article class="card"><div class="ill ill-cut"><span></span><span></span><b></b></div><h3>Cortes precisos</h3><p>Divida na agulha, arraste as alças para aparar, reordene, duplique e exclua trechos com um toque.</p></article>
+    <article class="card"><div class="ill ill-tr"><span></span><span></span></div><h3>Transições suaves</h3><p>Dissolver, deslizar, zoom, desfocar e pelo preto — aplique em um corte ou em todos de uma vez.</p></article>
+    <article class="card"><div class="ill ill-txt"><b>Aa</b><i>Aa</i></div><h3>Texto animado</h3><p>Pop, máquina de escrever, deslizar, quicar e zoom. Escolha cor, fonte, fundo e posição.</p></article>
+    <article class="card"><div class="ill ill-cc"><span>olha só isso…</span></div><h3>Legenda automática</h3><p>Reconhecimento de fala em português rodando no seu aparelho. Edite cada frase e escolha o estilo.</p></article>
+    <article class="card"><div class="ill ill-fx"><span></span><span></span><span></span><span></span></div><h3>Filtros e cor</h3><p>Filtros próprios, LUTs 3D e ajustes de brilho, contraste e saturação feitos na GPU.</p></article>
+    <article class="card"><div class="ill ill-kb"><span></span></div><h3>Zoom e Ken Burns</h3><p>Movimento com quadros-chave: aproxime, afaste ou passeie pela imagem com curvas suaves.</p></article>
+    <article class="card"><div class="ill ill-ar"><span class="a9"></span><span class="a1"></span><span class="a16"></span></div><h3>Formatos para cada rede</h3><p>9:16 para Reels, TikTok e Shorts; 1:1 para o feed; 16:9 para o YouTube. Até 1080p, MP4.</p></article>
+    <article class="card"><div class="ill ill-beat"><span></span><span></span><span></span><span></span><span></span><span></span></div><h3>Música na batida</h3><p>Adicione sua trilha, o Caps detecta o BPM e ajusta os cortes para cair no tempo da música.</p></article>
+  </div>
+</section>
+
+<section class="band">
+  <div><h2>Privado de verdade</h2><p>Nada de upload: o processamento acontece no navegador, com WebGL, WebCodecs e WebAssembly. Ideal para quem tem pouco plano de dados — depois do primeiro acesso, funciona até offline.</p></div>
+  <div class="stats"><div><b>0</b><span>arquivos enviados</span></div><div><b>R$ 0</b><span>para sempre</span></div><div><b>100%</b><span>em português</span></div></div>
+</section>
+
+<section id="como" class="sec">
+  <h2>Como funciona</h2>
+  <ol class="steps">
+    <li><span>1</span><h3>Importe</h3><p>Toque em <b>Abrir editor</b> e escolha vídeos e fotos da galeria.</p></li>
+    <li><span>2</span><h3>Edite</h3><p>Corte, coloque transições, texto, filtros e gere as legendas automáticas.</p></li>
+    <li><span>3</span><h3>Exporte</h3><p>Escolha 9:16, 1:1 ou 16:9, exporte em MP4 e salve no Fotos ou compartilhe.</p></li>
+  </ol>
+  <div class="center"><a class="cta" href="editor/">Começar agora</a></div>
+  <p class="tip">Dica: no iPhone, toque em <b>Compartilhar → Adicionar à Tela de Início</b> para usar o Caps como app.</p>
+</section>
+
+<section id="faq" class="sec">
+  <h2>Dúvidas frequentes</h2>
+  <details><summary>O Caps é grátis mesmo?</summary><p>Sim. Não tem plano pago, cadastro nem marca d'água. Tudo usa tecnologias abertas que rodam no seu aparelho.</p></details>
+  <details><summary>Meus vídeos vão para algum servidor?</summary><p>Não. Os arquivos ficam no seu celular; a edição e a exportação acontecem dentro do navegador.</p></details>
+  <details><summary>Funciona no iPhone?</summary><p>Sim, no Safari do iOS 16.4 ou mais novo. Para vídeos longos, prefira exportar em 720p e mantenha a tela aberta durante a exportação.</p></details>
+  <details><summary>Como funcionam as legendas automáticas?</summary><p>Usamos um modelo aberto de reconhecimento de fala (Whisper) que roda no próprio aparelho. Na primeira vez ele baixa cerca de 40 MB e fica guardado para as próximas.</p></details>
+  <details><summary>Em que formato o vídeo sai?</summary><p>MP4 (H.264 + AAC), que abre em qualquer rede social. Até 1080×1920 no formato vertical.</p></details>
+  <details><summary>Preciso de internet?</summary><p>Só no primeiro acesso (e para baixar o modelo de legendas). Depois o editor funciona offline.</p></details>
+</section>
 </main>
-<nav id="tools" class="tools"></nav>
-<div id="sheet" class="sheet" hidden><div class="sheet-card"><div class="grab"></div><div class="sheet-head"><b id="sheetTitle"></b><button id="sheetClose" class="pill">OK</button></div><div id="sheetBody"></div></div></div>
-<div id="toast" class="toast" hidden></div>
-<script type="module" src="/src/main.js"></script>
+
+<footer class="foot">
+  <div class="logo"><img src="icons/icon.svg" alt="" width="24" height="24"><b>Caps</b></div>
+  <nav><a href="editor/">Editor</a><a href="como-funciona.html">Por dentro do Caps</a><a href="https://github.com/kauebbrolivera-maker/caps">Código aberto</a></nav>
+  <small>Feito no Brasil · projeto independente e de código aberto (MIT).</small>
+</footer>
 </body>
 </html>
