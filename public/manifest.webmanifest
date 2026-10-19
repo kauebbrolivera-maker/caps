@@ -2,7 +2,7 @@
   "name": "Caps — editor de vídeo",
   "short_name": "Caps",
   "lang": "pt-BR",
-  "start_url": "./",
+  "start_url": "./editor/",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
