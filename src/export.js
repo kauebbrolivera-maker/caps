@@ -10,7 +10,7 @@ export async function getFFmpeg(log) {
   const { FFmpeg } = await import('@ffmpeg/ffmpeg');
   const f = new FFmpeg();
   if (log) f.on('log', ({ message }) => log(message));
-  const base = new URL('ffmpeg/', document.baseURI).href;
+  const base = new URL(location.pathname.includes('/editor/') ? '../ffmpeg/' : 'ffmpeg/', document.baseURI).href;
   await f.load({ coreURL: base + 'ffmpeg-core.js', wasmURL: base + 'ffmpeg-core.wasm' });
   return (ff = f);
 }
@@ -21,9 +21,8 @@ function seek(el, t) {
   return new Promise(r => { const done = () => { el.removeEventListener('seeked', done); clearTimeout(to); r(); }; const to = setTimeout(done, 3000); el.addEventListener('seeked', done); el.currentTime = t; });
 }
 export async function exportProject(p, { height = 720, fps = 30, onProgress = () => {}, log } = {}) {
-  const portrait = p.aspect === '9:16';
   const short = height, long = Math.round(height * 16 / 9 / 2) * 2;
-  const W = portrait ? short : long, H = portrait ? long : short;
+  const [W, H] = p.aspect === '9:16' ? [short, long] : p.aspect === '1:1' ? [short, short] : [long, short];
   const R = new Renderer(W, H), total = totalDur(p), N = Math.ceil(total * fps);
   p.clips.forEach(c => c.el.pause && c.el.pause());
   const cfg = { codec: H * W > 921600 ? 'avc1.640028' : 'avc1.4d401f', width: W, height: H, bitrate: H * W > 921600 ? 8e6 : 4e6, framerate: fps };
