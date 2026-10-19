@@ -74,7 +74,7 @@ Ex.: `index.html?transport=ntfy&topic=k8Qe...&sid=kaue` ou `index.html?transport
    {"status":"done","text":"Hoje faz 24° e sol em São Paulo.","expr":"happy"}
    {"status":"error","text":"Mensagem de erro opcional em pt-BR"}
    ```
-   `404` também conta como `pending`. `expr` é opcional (`neutral`, `happy`, `angry`, `sad`, `surprised`, `suspicious`, `wink`; padrão `neutral`).
+   `404` também conta como `pending`. `audio` é opcional: URL `https` de um áudio com a voz da resposta (ex.: `{"status":"done","text":"...","expr":"happy","audio":"https://.../voz.mp3"}`). Com `audio`, a página toca esse áudio (esfera e boca reagem ao som real via `AnalyserNode`, legenda = `text`). Se não começar a tocar em ~4 s ou der erro, cai para a voz do navegador (`speechSynthesis`) com o mesmo `text`. Para o analisador funcionar, o servidor do áudio precisa mandar `Access-Control-Allow-Origin` (sem CORS o áudio ainda toca, mas a reação vira simulada). `expr` é opcional (`neutral`, `happy`, `angry`, `sad`, `surprised`, `suspicious`, `wink`; padrão `neutral`).
 3. **CORS** obrigatório (a página está em outro domínio): responder `OPTIONS` com `Access-Control-Allow-Origin: *` (ou o domínio do Pages), `Access-Control-Allow-Headers: Content-Type`, `Access-Control-Allow-Methods: GET, POST, OPTIONS`, e mandar `Access-Control-Allow-Origin` também no POST e no GET. Precisa ser **HTTPS** (o Pages é HTTPS).
 
 ### Relay oficial: `open-relay` (Cloudflare Worker)
@@ -90,12 +90,15 @@ Endpoints:
 | Quem | Método e rota | Corpo / resposta |
 |---|---|---|
 | página (público, CORS só para `https://kauebbrolivera-maker.github.io`) | `POST /ask` | `{sid, text, chat_id?, init_data?}` → `202 {ok:true, sid}`. `400` validação (`sid` 1–80 chars `[A-Za-z0-9_.:-]`, `text` ≤ 2000), `409` sid repetido, `429` mais de 30 asks/min por IP (IPv6 por /64) |
-| página (público) | `GET /answer?sid=` | `{status:'pending'}` / `{status:'done', text, expr}` / `{status:'error', text}`, ou `404 {status:'unknown'}` |
+| página (público) | `GET /answer?sid=` | `{status:'pending'}` / `{status:'done', text, expr, audio?}` / `{status:'error', text}`, ou `404 {status:'unknown'}` |
 | bot (header `X-Open-Key`) | `GET /pending` | `{asks:[{sid, chat_id, text, init_data?, created, redelivery}]}`. Sem a chave ou chave errada → `401` |
-| bot (header `X-Open-Key`) | `POST /answer` | `{sid, text, expr}` ou `{sid, status:'error', text}` → `200 {ok:true}`. `404` sid desconhecido/expirado, `409` já respondido |
+| página (público) | `GET /audio?sid=` (e `HEAD`) | os bytes do áudio guardado com o `Content-Type` original, `Content-Length`, `Accept-Ranges: bytes` (suporta `Range` → `206`/`416`), `Cache-Control: no-store`, CORS para o Pages. `404` se não existe/expirou |
+| bot (header `X-Open-Key`) | `POST /audio` | `{sid, mime, b64}` (base64 do arquivo; `mime`: `audio/mpeg`, `audio/ogg`, `audio/opus`, `audio/wav`, `audio/mp4`, `audio/aac`, `audio/webm`) → `200 {ok:true, sid, size, url}`. Máx. **1,5 MB** decodificado (`413` acima). O ask precisa existir (`404` senão). Mandar **antes** do `/answer`. Expira junto com o ask (10 min) |
+| bot (header `X-Open-Key`) | `POST /answer` | `{sid, text, expr, audio?}` ou `{sid, status:'error', text}` → `200 {ok:true}`. `404` sid desconhecido/expirado, `409` já respondido |
 
 - **Entrega com "lease" de 60 s:** cada ask pendente é devolvido por `/pending` uma vez e fica "tomado" por 60 s. Se o bot não responder nesse prazo, ele volta no próximo `/pending` com `redelivery:true` (sobrevive a um crash do bot). Depois de respondido, nunca mais aparece. O bot deve fazer polling de `/pending` a cada ~1–2 s.
-- **Expiração:** tudo some 10 min depois do ask.
+- **Voz (áudio):** fluxo do bot: `POST /audio {sid, mime:'audio/mpeg', b64}` → pega o `url` devolvido → `POST /answer {sid, text, expr, audio:url}`. O campo `audio` do `/answer` aceita **qualquer URL `https`** (até 1000 chars), não só o `/audio` do relay; `http://` dá `400`. Áudio de fora precisa de CORS para a reação real (senão é simulada). Use mp3/ogg curtos (1,5 MB ≈ 1–1,5 min de mp3 a 128 kbps; a 48–64 kbps cabem ~3 min).
+- **Expiração:** tudo some 10 min depois do ask (inclusive o áudio).
 - **Chave:** o `X-Open-Key` é um segredo do Worker (`OPEN_RELAY_KEY`). Não fica neste repositório nem na página.
 - **`init_data`:** chega cru. O bot deve validar o hash com o token do bot antes de confiar no `chat_id`.
 

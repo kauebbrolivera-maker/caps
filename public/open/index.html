@@ -394,18 +394,33 @@ function stopAll(){
   fake.on=false;
 }
 
-function speak(url, text){
+// unlock audio inside a user gesture (send / Enter / mic): resume the AudioContext and prime one <audio>
+var primedEl=null;
+function silentWav(){ var n=800, b=new Uint8Array(44+n), d=new DataView(b.buffer), w=function(o,t){ for(var i=0;i<t.length;i++) b[o+i]=t.charCodeAt(i); };
+  w(0,'RIFF'); d.setUint32(4,36+n,true); w(8,'WAVEfmt '); d.setUint32(16,16,true); d.setUint16(20,1,true); d.setUint16(22,1,true);
+  d.setUint32(24,8000,true); d.setUint32(28,8000,true); d.setUint16(32,1,true); d.setUint16(34,8,true); w(36,'data'); d.setUint32(40,n,true);
+  for(var i=44;i<b.length;i++) b[i]=128; var s=''; for(var j=0;j<b.length;j++) s+=String.fromCharCode(b[j]); return 'data:audio/wav;base64,'+btoa(s); }
+function unlockAudio(){
+  var c=getCtx(); if(c && c.state!=='running'){ try{ c.resume(); }catch(e){} }
+  if(!primedEl){ try{ var el=new Audio(); el.crossOrigin='anonymous'; el.playsInline=true; el.setAttribute('playsinline',''); el.src=silentWav();
+    var p=el.play(); if(p && p.then) p.then(function(){ el.pause(); },function(){}); primedEl=el; }catch(e){} }
+}
+window.openUnlockAudio=unlockAudio;
+function speak(url, text, opts){
   if(!url) return;
-  stopAll(); var c=getCtx();
+  opts=opts||{}; stopAll(); var c=getCtx(), played=false, fell=false;
+  var fallback=function(why){ if(fell||played) return; fell=true; console.warn('[open] audio '+why+', usando voz do navegador', url);
+    if(audioEl){ try{ audioEl.pause(); }catch(e){} audioEl.onended=null; audioEl.onerror=null; } audioEl=null; if(text) speakTTS(text); };
+  if(opts.fallbackMs>0) setTimeout(function(){ if(!played && !fell && !tapEl.classList.contains('on')) fallback('não tocou em '+(opts.fallbackMs/1000)+' s'); }, opts.fallbackMs);
   var start=function(cors){
-    var el=new Audio(); if(cors) el.crossOrigin='anonymous'; el.preload='auto'; el.playsInline=true; el.setAttribute('playsinline','');
-    el.src=url; audioEl=el;
+    var el; if(cors && primedEl){ el=primedEl; primedEl=null; try{ el.pause(); }catch(e){} } else { el=new Audio(); if(cors) el.crossOrigin='anonymous'; el.playsInline=true; el.setAttribute('playsinline',''); }
+    el.preload='auto'; el.src=url; audioEl=el;
     if(cors && c){ try{ srcNode=c.createMediaElementSource(el); srcNode.connect(analyser); useAnalyser=true; fake.on=false; }catch(e){ useAnalyser=false; } }
     else { useAnalyser=false; }
-    el.onplaying=function(){ setState('speaking'); if(!useAnalyser){ fake.on=true; fake.t0=performance.now()/1000; fake.boundaries=false; } if(text) caption(text,0); };
+    el.onplaying=function(){ if(fell){ try{ el.pause(); }catch(e){} return; } played=true; setState('speaking'); if(!useAnalyser){ fake.on=true; fake.t0=performance.now()/1000; fake.boundaries=false; } if(text) caption(text,0); };
     el.onended=function(){ if(audioEl===el) endSpeaking(); };
     var tried=false;
-    el.onerror=function(){ if(cors && !tried){ tried=true; start(false); } else { console.warn('[open] audio failed', url); if(text) speakTTS(text); } };
+    el.onerror=function(){ if(fell || audioEl!==el) return; if(cors && !tried){ tried=true; start(false); } else fallback('falhou'); };
     var p=el.play();
     if(p && p.catch) p.catch(function(err){
       if(err && err.name==='NotAllowedError') needTap(function(){ if(c) c.resume(); el.play().catch(function(){}); });
@@ -925,7 +940,7 @@ function httpTransport(base){
           return sleep(1500).then(function(){ return fetch(base+'/answer?sid='+encodeURIComponent(msg.sid),{cache:'no-store'}); })
             .then(function(r2){ if(r2.status===404) return {status:'pending'}; if(!r2.ok) throw chatErr('http','código '+r2.status); return r2.json(); },
                   function(e){ if(e&&e.kind) throw e; return {status:'pending', _neterr:true}; })
-            .then(function(j){ j=j||{}; if(j.status==='done') return {text:String(j.text||''), expr:j.expr};
+            .then(function(j){ j=j||{}; if(j.status==='done') return {text:String(j.text||''), expr:j.expr, audio:j.audio};
               if(j.status==='error') { var er=chatErr('bot'); if(j.text) er.message=String(j.text); throw er; }
               return poll(); });
         };
@@ -962,7 +977,7 @@ function ntfyTransport(server, topic){
     return connect().then(function(){
       return new Promise(function(res, rej){
         var to=setTimeout(function(){ delete waiting[msg.sid]; rej(chatErr('timeout')); }, CH.TIMEOUT);
-        waiting[msg.sid]=function(j){ clearTimeout(to); if(j.status==='error') { var er=chatErr('bot'); if(j.text) er.message=String(j.text); rej(er); } else res({text:String(j.text||''), expr:j.expr}); };
+        waiting[msg.sid]=function(j){ clearTimeout(to); if(j.status==='error') { var er=chatErr('bot'); if(j.text) er.message=String(j.text); rej(er); } else res({text:String(j.text||''), expr:j.expr, audio:j.audio}); };
         var body={sid:msg.sid, text:msg.text}; if(msg.chat_id!=null) body.chat_id=msg.chat_id;
         fetch(server+'/'+encodeURIComponent(topic)+'-ask',{method:'POST', body:JSON.stringify(body)})   // text/plain body: no CORS preflight
           .then(function(r){ if(!r.ok){ clearTimeout(to); delete waiting[msg.sid]; rej(chatErr('http','código '+r.status)); } })
@@ -1000,8 +1015,9 @@ function ask(text){
   return Promise.race([Promise.resolve().then(function(){ return CH.transport.send(msg); }), guard]).then(function(ans){
     ans=ans||{}; var t=String(ans.text||'').trim(); if(!t) throw chatErr('bot');
     logLine('b', t); CH.history.push({role:'bot', text:t, expr:ans.expr}); chatHint('');
-    openFace(ans.expr||'neutral'); CH.awaitEnd=true; say(t);
-    try{ window.dispatchEvent(new CustomEvent('open:answer',{detail:{sid:msg.sid, text:t, expr:ans.expr}})); }catch(e){}
+    openFace(ans.expr||'neutral'); CH.awaitEnd=true;
+    if(ans.audio && /^https?:\/\//i.test(String(ans.audio))) speak(String(ans.audio), t, {fallbackMs:4000}); else say(t);
+    try{ window.dispatchEvent(new CustomEvent('open:answer',{detail:{sid:msg.sid, text:t, expr:ans.expr, audio:ans.audio||null}})); }catch(e){}
     return ans;
   }).catch(function(e){
     var m=(e&&e.kind)?e.message:CHAT_ERR.bot; console.warn('[open] chat:', m);
@@ -1011,8 +1027,8 @@ function ask(text){
   }).then(function(r){ CH.busy=false; CH.send.disabled=!CH.transport; return r; });
 }
 window.addEventListener('open:ended', function(){ if(CH.awaitEnd){ CH.awaitEnd=false; setTimeout(function(){ if(!CH.busy && state!=='speaking') window.openState('idle'); }, 900); } });
-CH.send.addEventListener('click', function(){ ask(CH.inp.value); CH.inp.focus(); });
-CH.inp.addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.isComposing){ e.preventDefault(); ask(CH.inp.value); } });
+CH.send.addEventListener('click', function(){ unlockAudio(); ask(CH.inp.value); CH.inp.focus(); });
+CH.inp.addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.isComposing){ e.preventDefault(); unlockAudio(); ask(CH.inp.value); } });
 // ---- mic (Web Speech recognition, pt-BR): hold = push-to-talk, tap = toggle ----
 var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 function recStart(){
@@ -1030,7 +1046,7 @@ function recStart(){
 function recStop(){ if(CH.rec){ try{ CH.rec.stop(); }catch(e){} } }
 if(!SR){ CH.mic.style.display='none'; }
 else {
-  CH.mic.addEventListener('pointerdown', function(e){ e.preventDefault(); if(CH.recOn){ recStop(); CH.ignoreUp=true; return; } CH.downAt=Date.now(); recStart(); });
+  CH.mic.addEventListener('pointerdown', function(e){ e.preventDefault(); unlockAudio(); if(CH.recOn){ recStop(); CH.ignoreUp=true; return; } CH.downAt=Date.now(); recStart(); });
   CH.mic.addEventListener('pointerup', function(){ if(CH.ignoreUp){ CH.ignoreUp=false; return; } if(CH.recOn && Date.now()-CH.downAt>450) recStop(); });
   CH.mic.addEventListener('contextmenu', function(e){ e.preventDefault(); });
 }
