@@ -14,6 +14,7 @@ npm run dev        # desenvolvimento
 npm run build      # gera dist/ (estático)
 npm run preview    # serve dist/ em http://localhost:4173
 npm run shots      # teste E2E com Playwright (viewport iPhone) → /workspace/caps-shots
+node test/e2e-mobile.mjs  # E2E iPhone 14: landing → editor → edição → legendas → export 9:16/1:1/16:9 (servir dist/ em /caps/)
 ```
 
 ## Publicar no GitHub Pages
@@ -21,7 +22,7 @@ Já existe `.github/workflows/pages.yml` (build com Vite + deploy oficial do Pag
 1. Criar o repositório `caps` (público) na conta do Kaue.
 2. `git remote add origin https://github.com/<usuario>/caps.git && git push -u origin main`
 3. Settings → Pages → Source: **GitHub Actions**.
-4. Esperar o workflow ficar verde; abrir `https://<usuario>.github.io/caps/` no Safari → Compartilhar → **Adicionar à Tela de Início**.
+4. Esperar o workflow ficar verde; abrir `https://<usuario>.github.io/caps/` (landing) ou `/caps/editor/` (editor) no Safari → Compartilhar → **Adicionar à Tela de Início**.
 
 ## Bots (futuro)
 Telegram (Bot API, webhook) ou Discord (bot com slash command) poderiam receber vídeo + instruções (“corta os silêncios, legenda e 9:16”). Como o Caps edita no aparelho, o caminho seria: (a) o bot salva um **projeto JSON** + mídia e manda um link `…/caps/#projeto=<id>` que abre pronto no iPhone; ou (b) um worker headless (Playwright + o mesmo código do Caps ou ffmpeg nativo) num servidor renderiza e devolve o MP4. O formato de projeto (`P` em `src/main.js`) já é serializável exceto os elementos de mídia.

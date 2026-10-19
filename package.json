@@ -9,7 +9,8 @@
     "dev": "npm run prepare-assets && vite",
     "build": "npm run prepare-assets && vite build",
     "preview": "vite preview --port 4173",
-    "shots": "node test/shots.mjs"
+    "shots": "node test/shots.mjs",
+    "e2e": "node test/e2e-mobile.mjs"
   },
   "license": "MIT",
   "dependencies": {

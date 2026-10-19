@@ -1,7 +1,7 @@
 // Teste E2E: serve dist/, abre com viewport de iPhone, edita, gera legendas, exporta e tira screenshots.
 import { chromium, devices } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
-const URL_ = process.env.URL || 'http://localhost:4173/';
+const URL_ = process.env.URL || 'http://localhost:4173/editor/';
 const OUT = '/workspace/caps-shots'; mkdirSync(OUT, { recursive: true });
 const dev = devices['iPhone 15 Pro'] || devices['iPhone 13'];
 const b = await chromium.launch();
@@ -59,7 +59,7 @@ for (const ar of ['9:16', '16:9']) {
   if (ar === '9:16') await p.screenshot({ path: `${OUT}/5-exportar.png` });
   await p.click('#sheetClose');
 }
-await p.goto(URL_ + 'como-funciona.html'); await p.waitForTimeout(300);
+await p.goto(URL_ + '../como-funciona.html'); await p.waitForTimeout(300);
 await p.screenshot({ path: `${OUT}/6-como-funciona.png` });
 res.sw = await p.evaluate(async () => !!(await navigator.serviceWorker.getRegistration()));
 console.log(JSON.stringify(res, null, 1));
